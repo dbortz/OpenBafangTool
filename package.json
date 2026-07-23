@@ -76,7 +76,12 @@
       ".erb/dll"
     ],
     "transform": {
-      "\\.(ts|tsx|js|jsx)$": "ts-jest"
+      "\\.(ts|tsx|js|jsx)$": [
+        "ts-jest",
+        {
+          "isolatedModules": true
+        }
+      ]
     }
   },
   "dependencies": {
@@ -230,8 +235,11 @@
     ]
   },
   "devEngines": {
-    "node": ">=14.x",
-    "npm": ">=7.x"
+    "runtime": {
+      "name": "node",
+      "version": ">=14",
+      "onFail": "warn"
+    }
   },
   "electronmon": {
     "patterns": [

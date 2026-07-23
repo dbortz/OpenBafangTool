@@ -7,9 +7,19 @@ import {
     message,
     Switch,
     Popconfirm,
+    Card,
+    Input,
+    Button,
+    Space,
 } from 'antd';
 import type { DescriptionsProps } from 'antd';
-import { SyncOutlined, DeliveredProcedureOutlined } from '@ant-design/icons';
+import {
+    SyncOutlined,
+    DeliveredProcedureOutlined,
+    DeleteOutlined,
+    SaveOutlined,
+    FolderOpenOutlined,
+} from '@ant-design/icons';
 import BafangUartMotor from '../../../../../device/high-level/BafangUartMotor';
 import {
     AssistLevel,
@@ -39,6 +49,13 @@ import {
 } from '../../../../utils/UIUtils';
 import AssistLevelTableComponent from '../../../../components/AssistLevelTableComponent';
 import i18n from '../../../../../i18n/i18n';
+import {
+    BafangUartProfileSummary,
+    deleteProfile,
+    listProfiles,
+    loadProfile,
+    saveProfile,
+} from '../../../../../profiles/BafangUartProfileStore';
 
 const { Title } = Typography;
 
@@ -54,6 +71,9 @@ type SettingsState = BafangUartMotorInfo &
         throttle_speed_limit_unit: string;
         lastUpdateTime: number;
         oldStyle: boolean;
+        profiles: BafangUartProfileSummary[];
+        selectedProfile: string | null;
+        newProfileName: string;
     };
 
 /* eslint-disable camelcase */
@@ -96,6 +116,9 @@ class BafangUartMotorSettingsView extends React.Component<
                     : 'kmh',
             lastUpdateTime: 0,
             oldStyle: false,
+            profiles: listProfiles(),
+            selectedProfile: null,
+            newProfileName: '',
         };
         this.getElectricalParameterItems =
             this.getElectricalParameterItems.bind(this);
@@ -105,6 +128,9 @@ class BafangUartMotorSettingsView extends React.Component<
         this.getOtherItems = this.getOtherItems.bind(this);
         this.saveParameters = this.saveParameters.bind(this);
         this.updateData = this.updateData.bind(this);
+        this.saveCurrentAsProfile = this.saveCurrentAsProfile.bind(this);
+        this.loadProfileIntoForm = this.loadProfileIntoForm.bind(this);
+        this.deleteSelectedProfile = this.deleteSelectedProfile.bind(this);
         this.onWriteSuccess = this.onWriteSuccess.bind(this);
         this.onWriteError = this.onWriteError.bind(this);
         connection.emitter.removeAllListeners('write-success');
@@ -903,6 +929,79 @@ class BafangUartMotorSettingsView extends React.Component<
         }, 3000);
     }
 
+    saveCurrentAsProfile(): void {
+        const { newProfileName } = this.state;
+        if (!newProfileName.trim()) {
+            message.error('Enter a profile name first');
+            return;
+        }
+        try {
+            saveProfile(
+                newProfileName.trim(),
+                this.initial_info,
+                this.state as BafangUartMotorBasicParameters,
+                this.state as BafangUartMotorPedalParameters,
+                this.state as BafangUartMotorThrottleParameters,
+            );
+            this.setState({
+                profiles: listProfiles(),
+                newProfileName: '',
+            });
+            message.success(`Profile "${newProfileName.trim()}" saved`);
+        } catch (e) {
+            message.error(`Failed to save profile: ${(e as Error).message}`);
+        }
+    }
+
+    loadProfileIntoForm(): void {
+        const { selectedProfile } = this.state;
+        if (!selectedProfile) {
+            message.error('Select a profile first');
+            return;
+        }
+        try {
+            const profile = loadProfile(selectedProfile);
+            this.setState({
+                ...profile.basic,
+                ...profile.pedal,
+                ...profile.throttle,
+                pedal_speed_limit_unit:
+                    profile.pedal.pedal_speed_limit === SpeedLimitByDisplay
+                        ? 'by_display'
+                        : 'kmh',
+                throttle_speed_limit_unit:
+                    profile.throttle.throttle_speed_limit ===
+                    SpeedLimitByDisplay
+                        ? 'by_display'
+                        : 'kmh',
+            });
+            message.success(
+                `Profile "${profile.name}" loaded into the form — review the values, then press the write button to apply to the motor`,
+                6,
+            );
+        } catch (e) {
+            message.error(`Failed to load profile: ${(e as Error).message}`);
+        }
+    }
+
+    deleteSelectedProfile(): void {
+        const { selectedProfile } = this.state;
+        if (!selectedProfile) {
+            message.error('Select a profile first');
+            return;
+        }
+        try {
+            deleteProfile(selectedProfile);
+            this.setState({
+                profiles: listProfiles(),
+                selectedProfile: null,
+            });
+            message.success('Profile deleted');
+        } catch (e) {
+            message.error(`Failed to delete profile: ${(e as Error).message}`);
+        }
+    }
+
     render() {
         const { connection } = this.props;
         const { oldStyle } = this.state;
@@ -920,6 +1019,70 @@ class BafangUartMotorSettingsView extends React.Component<
                     />
                 </Typography.Title>
                 <br />
+                <Card
+                    title="Profiles"
+                    size="small"
+                    style={{ marginBottom: '20px' }}
+                >
+                    <Space wrap>
+                        <Select
+                            style={{ minWidth: 220 }}
+                            placeholder="Select profile"
+                            value={this.state.selectedProfile}
+                            onChange={(value) =>
+                                this.setState({ selectedProfile: value })
+                            }
+                            options={this.state.profiles.map((p) => ({
+                                value: p.filename,
+                                label: p.name,
+                            }))}
+                        />
+                        <Button
+                            icon={<FolderOpenOutlined />}
+                            onClick={this.loadProfileIntoForm}
+                        >
+                            Load into form
+                        </Button>
+                        <Popconfirm
+                            title="Delete profile"
+                            description="Delete this profile file? The motor is not affected."
+                            onConfirm={this.deleteSelectedProfile}
+                            okText={i18n.t('yes')}
+                            cancelText={i18n.t('no')}
+                        >
+                            <Button danger icon={<DeleteOutlined />} />
+                        </Popconfirm>
+                    </Space>
+                    <br />
+                    <br />
+                    <Space wrap>
+                        <Input
+                            style={{ minWidth: 220 }}
+                            placeholder="New profile name"
+                            value={this.state.newProfileName}
+                            onChange={(e) =>
+                                this.setState({
+                                    newProfileName: e.target.value,
+                                })
+                            }
+                            onPressEnter={this.saveCurrentAsProfile}
+                        />
+                        <Button
+                            icon={<SaveOutlined />}
+                            onClick={this.saveCurrentAsProfile}
+                        >
+                            Save current values as profile
+                        </Button>
+                    </Space>
+                    <Typography.Text
+                        type="secondary"
+                        style={{ display: 'block', marginTop: 8 }}
+                    >
+                        Loading a profile only fills this form — nothing is
+                        written to the motor until you press the write button
+                        and confirm.
+                    </Typography.Text>
+                </Card>
                 {!oldStyle && (
                     <>
                         <Descriptions

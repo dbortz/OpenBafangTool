@@ -178,6 +178,9 @@ const configuration: webpack.Configuration = {
         port,
         compress: true,
         hot: true,
+        client: {
+            overlay: { warnings: false, errors: true },
+        },
         headers: { 'Access-Control-Allow-Origin': '*' },
         static: {
             publicPath: '/',

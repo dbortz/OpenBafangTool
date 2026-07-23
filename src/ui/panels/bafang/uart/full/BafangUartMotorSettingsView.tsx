@@ -74,6 +74,7 @@ type SettingsState = BafangUartMotorInfo &
         profiles: BafangUartProfileSummary[];
         selectedProfile: string | null;
         newProfileName: string;
+        formEpoch: number;
     };
 
 /* eslint-disable camelcase */
@@ -119,6 +120,7 @@ class BafangUartMotorSettingsView extends React.Component<
             profiles: listProfiles(),
             selectedProfile: null,
             newProfileName: '',
+            formEpoch: 0,
         };
         this.getElectricalParameterItems =
             this.getElectricalParameterItems.bind(this);
@@ -902,6 +904,9 @@ class BafangUartMotorSettingsView extends React.Component<
             ...this.initial_pedal_parameters,
             ...this.initial_throttle_parameters,
             lastUpdateTime: Date.now(),
+            // see loadProfileIntoForm — remount so the assist table picks up
+            // freshly read values too
+            formEpoch: this.state.formEpoch + 1,
         });
     }
 
@@ -965,6 +970,10 @@ class BafangUartMotorSettingsView extends React.Component<
                 ...profile.basic,
                 ...profile.pedal,
                 ...profile.throttle,
+                // remount the parameter sections — some child components
+                // (e.g. AssistLevelTableComponent) copy props into their own
+                // state at construction and never sync afterwards
+                formEpoch: this.state.formEpoch + 1,
                 pedal_speed_limit_unit:
                     profile.pedal.pedal_speed_limit === SpeedLimitByDisplay
                         ? 'by_display'
@@ -1004,7 +1013,7 @@ class BafangUartMotorSettingsView extends React.Component<
 
     render() {
         const { connection } = this.props;
-        const { oldStyle } = this.state;
+        const { oldStyle, formEpoch } = this.state;
         return (
             <div style={{ margin: '36px' }}>
                 <Typography.Title level={2} style={{ margin: 0 }}>
@@ -1084,7 +1093,7 @@ class BafangUartMotorSettingsView extends React.Component<
                     </Typography.Text>
                 </Card>
                 {!oldStyle && (
-                    <>
+                    <div key={`new-${formEpoch}`}>
                         <Descriptions
                             bordered
                             title={i18n.t('electric_parameters')}
@@ -1120,10 +1129,10 @@ class BafangUartMotorSettingsView extends React.Component<
                             items={this.getOtherItems()}
                             column={1}
                         />
-                    </>
+                    </div>
                 )}
                 {oldStyle && (
-                    <>
+                    <div key={`old-${formEpoch}`}>
                         <Descriptions
                             bordered
                             title={i18n.t('info')}
@@ -1158,7 +1167,7 @@ class BafangUartMotorSettingsView extends React.Component<
                             items={this.getThrottleParametersItems()}
                             column={1}
                         />
-                    </>
+                    </div>
                 )}
                 <FloatButton
                     icon={<SyncOutlined />}

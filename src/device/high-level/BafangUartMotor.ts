@@ -143,8 +143,13 @@ export default class BafangUartMotor implements IConnection {
             this.portBuffer.slice(0, this.portBuffer[1] + 2).forEach((byte) => {
                 sum += byte;
             });
-            sum &= 0xff;
-            if (sum === this.portBuffer[this.portBuffer[1] + 2]) {
+            // Some controllers (e.g. HZXT SZZ9 on BBS02B, fw 2.0.1.1) compute
+            // the response checksum as code + 2 + payload instead of
+            // code + len + payload — accept both variants
+            const checksumWithLen = sum & 0xff;
+            const checksumWithTwo = (sum - this.portBuffer[1] + 2) & 0xff;
+            const received = this.portBuffer[this.portBuffer[1] + 2];
+            if (received === checksumWithLen || received === checksumWithTwo) {
                 this.processPacket(
                     this.portBuffer.slice(0, this.portBuffer[1] + 3),
                 );

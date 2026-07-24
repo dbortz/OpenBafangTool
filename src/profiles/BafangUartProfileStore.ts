@@ -32,6 +32,49 @@ function profilesDir(): string {
     return path.join(getAppDataPath('open-bafang-tool'), 'profiles');
 }
 
+// Callers may hand in wider objects (e.g. a whole component state that
+// happens to contain these fields) — persist and restore ONLY the typed
+// parameter fields so nothing else leaks into profile files or, worse,
+// back into component state on load.
+const BASIC_KEYS: (keyof BafangUartMotorBasicParameters)[] = [
+    'low_battery_protection',
+    'current_limit',
+    'assist_profiles',
+    'wheel_diameter',
+    'magnets_per_wheel_rotation',
+    'speedmeter_type',
+];
+
+const PEDAL_KEYS: (keyof BafangUartMotorPedalParameters)[] = [
+    'pedal_type',
+    'pedal_assist_level',
+    'pedal_speed_limit',
+    'pedal_start_current',
+    'pedal_slow_start_mode',
+    'pedal_signals_before_start',
+    'pedal_time_to_stop',
+    'pedal_current_decay',
+    'pedal_stop_decay',
+    'pedal_keep_current',
+];
+
+const THROTTLE_KEYS: (keyof BafangUartMotorThrottleParameters)[] = [
+    'throttle_start_voltage',
+    'throttle_end_voltage',
+    'throttle_mode',
+    'throttle_assist_level',
+    'throttle_speed_limit',
+    'throttle_start_current',
+];
+
+function pick<T>(source: T, keys: (keyof T)[]): T {
+    const result: any = {};
+    keys.forEach((key) => {
+        result[key] = JSON.parse(JSON.stringify(source[key]));
+    });
+    return result as T;
+}
+
 function slugify(name: string): string {
     return name
         .toLowerCase()
@@ -73,6 +116,9 @@ export function saveProfile(
     pedal: BafangUartMotorPedalParameters,
     throttle: BafangUartMotorThrottleParameters,
 ): string {
+    basic = pick(basic, BASIC_KEYS);
+    pedal = pick(pedal, PEDAL_KEYS);
+    throttle = pick(throttle, THROTTLE_KEYS);
     if (!checkBasicParameters(basic)) {
         throw new Error('Basic parameters failed validation');
     }
@@ -116,6 +162,11 @@ export function loadProfile(filename: string): BafangUartProfile {
     if (profile.format !== 'obt-uart-profile') {
         throw new Error('Not a profile file');
     }
+    // Sanitize sections from disk — files written by older versions may
+    // contain extra keys that must not reach component state on load
+    profile.basic = pick(profile.basic, BASIC_KEYS);
+    profile.pedal = pick(profile.pedal, PEDAL_KEYS);
+    profile.throttle = pick(profile.throttle, THROTTLE_KEYS);
     if (!checkBasicParameters(profile.basic)) {
         throw new Error('Basic parameters failed validation');
     }

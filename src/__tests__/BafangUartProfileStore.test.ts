@@ -78,6 +78,73 @@ describe('BafangUartProfileStore', () => {
         expect(listProfiles().map((p) => p.name)).not.toContain(TEST_NAME);
     });
 
+    it('strips extra keys (e.g. whole component state) on save and load', () => {
+        // Simulate passing a whole component state as each section
+        const polluted: any = {
+            ...sampleBasic,
+            ...samplePedal,
+            ...sampleThrottle,
+            profiles: [{ name: 'stale', filename: 'stale.json', created: '' }],
+            selectedProfile: 'stale.json',
+            newProfileName: 'junk',
+            formEpoch: 42,
+            oldStyle: true,
+        };
+        const filename = saveProfile(
+            TEST_NAME,
+            null,
+            polluted,
+            polluted,
+            polluted,
+        );
+        const loaded = loadProfile(filename);
+        expect(loaded.basic).toEqual(sampleBasic);
+        expect(loaded.pedal).toEqual(samplePedal);
+        expect(loaded.throttle).toEqual(sampleThrottle);
+        expect((loaded.basic as any).profiles).toBeUndefined();
+        expect((loaded.basic as any).selectedProfile).toBeUndefined();
+        deleteProfile(filename);
+    });
+
+    it('sanitizes polluted legacy profile files on load', () => {
+        // Write a file the way the buggy version did: sections holding a
+        // whole state dump
+        const fs = require('fs');
+        const path = require('path');
+        const getAppDataPath = require('appdata-path');
+        const polluted = {
+            ...sampleBasic,
+            ...samplePedal,
+            ...sampleThrottle,
+            profiles: [{ name: 'stale', filename: 'stale.json', created: '' }],
+            selectedProfile: 'stale.json',
+        };
+        const dir = path.join(getAppDataPath('open-bafang-tool'), 'profiles');
+        const filename = 'jest-legacy-polluted.json';
+        fs.writeFileSync(
+            path.join(dir, filename),
+            JSON.stringify({
+                format: 'obt-uart-profile',
+                version: 1,
+                name: 'jest-legacy-polluted',
+                created: '2026-07-24T00:00:00.000Z',
+                motor_info: null,
+                basic: polluted,
+                pedal: polluted,
+                throttle: polluted,
+            }),
+            'utf-8',
+        );
+        try {
+            const loaded = loadProfile(filename);
+            expect(loaded.basic).toEqual(sampleBasic);
+            expect((loaded.basic as any).profiles).toBeUndefined();
+            expect((loaded.pedal as any).selectedProfile).toBeUndefined();
+        } finally {
+            deleteProfile(filename);
+        }
+    });
+
     it('rejects invalid parameters on save', () => {
         expect(() =>
             saveProfile(

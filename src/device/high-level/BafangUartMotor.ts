@@ -410,7 +410,6 @@ export default class BafangUartMotor implements IConnection {
 
     saveData(): boolean {
         if (
-            !checkInfo(this.info) ||
             !checkBasicParameters(this.basic_parameters) ||
             !checkPedalParameters(this.pedal_parameters) ||
             !checkThrottleParameters(this.throttle_parameters)
@@ -482,10 +481,6 @@ export default class BafangUartMotor implements IConnection {
         ]);
         const request = [
             BafangUartMotor.prepareWritePackage(
-                new Uint8Array([0x17, 0x01]),
-                BafangUartMotor.stringToHex(this.info.serial_number),
-            ),
-            BafangUartMotor.prepareWritePackage(
                 new Uint8Array([0x16, 0x52]),
                 basicParametersPacket,
             ),
@@ -498,6 +493,19 @@ export default class BafangUartMotor implements IConnection {
                 throttleParametersPacket,
             ),
         ];
+        // UART reads never populate the serial number, so an empty serial is
+        // the norm — write it only when there is a valid one to write, and
+        // never block the parameter writes on it. Its ack (code 0x17) is not
+        // counted by processWriteAnswerPacket, so the expected write-success
+        // count stays at 3 either way.
+        if (checkInfo(this.info)) {
+            request.unshift(
+                BafangUartMotor.prepareWritePackage(
+                    new Uint8Array([0x17, 0x01]),
+                    BafangUartMotor.stringToHex(this.info.serial_number),
+                ),
+            );
+        }
         const port = this.port;
         function sendRequest(i: number): void {
             log.info('Sent write package: ', request[i]);

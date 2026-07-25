@@ -70,6 +70,26 @@ describe('BafangUartMotor packet parsing (real BBS02B capture)', () => {
         expect(throttle.throttle_start_current).toBe(10);
     });
 
+    it('emits write-success for a real write ack and ignores empty serial', () => {
+        const motor = new BafangUartMotor('/dev/fake-port');
+        // Populate valid parameters from the real capture
+        [BASIC, PEDAL, THROTTLE].forEach((packet) =>
+            feedByteByByte(motor, packet),
+        );
+
+        // Empty serial (the UART norm) must not block parameter writes
+        expect(motor.getInfo().serial_number).toBe('');
+        expect(motor.saveData()).toBe(true);
+
+        // Real ack captured from the bike for the pedal write: 53 0b 5e
+        const successes: string[] = [];
+        motor.emitter.on('write-success', (name: string) =>
+            successes.push(name),
+        );
+        feedByteByByte(motor, hex('53 0b 5e'));
+        expect(successes).toEqual(['pedal']);
+    });
+
     it('still accepts the code+len+payload checksum variant', () => {
         // Same pedal packet, checksum recomputed the original way:
         // sum(code, len, payload) & 0xff = 0xed

@@ -44,6 +44,11 @@ export default class BafangUartMotor implements IConnection {
 
     private portBuffer: Uint8Array = new Uint8Array();
 
+    // Raw pedal "work mode" byte as read from the controller. Not exposed in
+    // the UI; preserved on write instead of upstream's hardcoded 10, which
+    // silently changed controllers configured as 0xff ("undetermined").
+    private pedal_work_mode: number = 0xff;
+
     constructor(port: string) {
         this.port = port;
         this.info = {
@@ -228,6 +233,7 @@ export default class BafangUartMotor implements IConnection {
                     data[23] & 0b111111;
                 break; // basic parameters
             case 0x53:
+                this.pedal_work_mode = data[6];
                 this.pedal_parameters.pedal_type = data[0];
                 this.pedal_parameters.pedal_assist_level = data[1];
                 this.pedal_parameters.pedal_speed_limit = data[2];
@@ -452,7 +458,7 @@ export default class BafangUartMotor implements IConnection {
             ((this.basic_parameters.speedmeter_type & 0b11) << 6) +
                 (this.basic_parameters.magnets_per_wheel_rotation & 0b111111),
         ]);
-        const workMode = 10;
+        const workMode = this.pedal_work_mode;
         const pedalParametersPacket: Uint8Array = new Uint8Array([
             this.pedal_parameters.pedal_type,
             this.pedal_parameters.pedal_assist_level,
